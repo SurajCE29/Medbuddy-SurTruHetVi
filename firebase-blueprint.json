@@ -1,0 +1,66 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Stores user's personal and medical information.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Full name of the user" },
+        "age": { "type": "integer", "description": "Age of the user" },
+        "gender": { "type": "string", "enum": ["male", "female", "other"], "description": "Gender of the user" },
+        "medicalHistory": { "type": "string", "description": "User's medical history" }
+      },
+      "required": ["name"]
+    },
+    "HistoryItem": {
+      "title": "Health History Record",
+      "description": "Stores AI analysis results for a user or family member.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The UID of the user who owns this record" },
+        "profileId": { "type": "string", "description": "The ID of the profile this record belongs to (self or family member ID)" },
+        "type": { 
+          "type": "string", 
+          "enum": ["disease-prediction", "medicine-prediction", "diet-plan", "first-aid", "report-analysis"],
+          "description": "The type of health analysis"
+        },
+        "query": { "type": "string", "description": "The user's input query" },
+        "result": { "type": "string", "description": "The AI's response (JSON stringified)" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When the record was created" }
+      },
+      "required": ["uid", "profileId", "type", "query", "result", "timestamp"]
+    },
+    "FamilyMember": {
+      "title": "Family Member",
+      "description": "Stores information about a user's family member.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "description": "The UID of the user who added this family member" },
+        "name": { "type": "string", "description": "Name of the family member" },
+        "age": { "type": "integer", "description": "Age of the family member" },
+        "gender": { "type": "string", "enum": ["Male", "Female", "Other"], "description": "Gender of the family member" },
+        "relation": { 
+          "type": "string", 
+          "enum": ["Father", "Mother", "Spouse", "Son", "Daughter", "Sibling", "Other"],
+          "description": "Relationship to the user"
+        },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the member was added" }
+      },
+      "required": ["ownerId", "name", "age", "gender", "relation", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile document"
+    },
+    "/history/{historyId}": {
+      "schema": "HistoryItem",
+      "description": "Health history records"
+    },
+    "/family/{memberId}": {
+      "schema": "FamilyMember",
+      "description": "Family members collection"
+    }
+  }
+}

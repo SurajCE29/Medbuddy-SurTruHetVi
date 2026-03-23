@@ -1,0 +1,154 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId} (matches auth.uid)
+    // Fields:
+    //   - name: string (required, 1-100 chars)
+    //   - age: int (optional, 0-150)
+    //   - gender: string (optional, enum: male, female, other)
+    //   - medicalHistory: string (optional, 0-5000 chars)
+    //
+    // Collection: history
+    // Document ID: auto-generated
+    // Fields:
+    //   - uid: string (required, matches auth.uid)
+    //   - profileId: string (required, 'self' or family member ID)
+    //   - type: string (required, enum: disease-prediction, medicine-prediction, diet-plan, first-aid, report-analysis)
+    //   - query: string (required, 1-1000 chars)
+    //   - result: string (required, 1-50000 chars)
+    //   - timestamp: timestamp (required)
+    //
+    // Collection: family
+    // Document ID: auto-generated
+    // Fields:
+    //   - ownerId: string (required, matches auth.uid)
+    //   - name: string (required, 1-100 chars)
+    //   - age: int (required, 0-150)
+    //   - gender: string (required, enum: Male, Female, Other)
+    //   - relation: string (required, enum: Father, Mother, Spouse, Son, Daughter, Sibling, Other)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function isFamilyOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.ownerId;
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidString(field, min, max) {
+      return request.resource.data[field] is string && 
+             request.resource.data[field].size() >= min && 
+             request.resource.data[field].size() <= max;
+    }
+
+    function isValidOptionalString(field, min, max) {
+      return !(field in request.resource.data) || 
+             (request.resource.data[field] is string && 
+              request.resource.data[field].size() >= min && 
+              request.resource.data[field].size() <= max);
+    }
+
+    function isValidInt(field, min, max) {
+      return request.resource.data[field] is int && 
+             request.resource.data[field] >= min && 
+             request.resource.data[field] <= max;
+    }
+
+    function isValidOptionalInt(field, min, max) {
+      return !(field in request.resource.data) || 
+             (request.resource.data[field] is int && 
+              request.resource.data[field] >= min && 
+              request.resource.data[field] <= max);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['name', 'age', 'gender', 'medicalHistory']) &&
+             isValidString('name', 1, 100) &&
+             isValidOptionalInt('age', 0, 150) &&
+             (!( 'gender' in data) || data.gender in ['male', 'female', 'other']) &&
+             isValidOptionalString('medicalHistory', 0, 5000);
+    }
+
+    function isValidHistory(data) {
+      return hasRequiredFields(['uid', 'profileId', 'type', 'query', 'result', 'timestamp']) &&
+             hasOnlyAllowedFields(['uid', 'profileId', 'type', 'query', 'result', 'timestamp']) &&
+             data.uid == request.auth.uid &&
+             data.type in ['disease-prediction', 'medicine-prediction', 'diet-plan', 'first-aid', 'report-analysis'] &&
+             isValidString('query', 1, 1000) &&
+             isValidString('result', 1, 50000) &&
+             data.timestamp is timestamp;
+    }
+
+    function isValidFamily(data) {
+      return hasRequiredFields(['ownerId', 'name', 'age', 'gender', 'relation', 'createdAt']) &&
+             hasOnlyAllowedFields(['ownerId', 'name', 'age', 'gender', 'relation', 'createdAt']) &&
+             data.ownerId == request.auth.uid &&
+             isValidString('name', 1, 100) &&
+             isValidInt('age', 0, 150) &&
+             data.gender in ['Male', 'Female', 'Other'] &&
+             data.relation in ['Father', 'Mother', 'Spouse', 'Son', 'Daughter', 'Sibling', 'Other'] &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+    }
+
+    match /history/{historyId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && isValidHistory(request.resource.data);
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
+    }
+
+    match /family/{memberId} {
+      allow read: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidFamily(request.resource.data);
+      allow update: if isAuthenticated() && isFamilyOwner() && isValidFamily(request.resource.data);
+      allow delete: if isAuthenticated() && isFamilyOwner();
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
